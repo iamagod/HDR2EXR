@@ -30,8 +30,12 @@ https://plugin-dev-quickstart.readthedocs.io/en/latest/index.html
 
 5) Connect camera to a computer to download the pictures.
 
- 
 
+***Good to know***
+It tries to keep the iso as low as possible but also the the exposure time, when exposure gets above 1 sec, it increases iso (until it runs out of iso and then increases exposure time again ;-)  .)
+I haven't really tested the exr file fully so not sure how good it is. So some very high red pixel values on some shots I did. Probably needs a bit of time to look into. Exr file is also quite big, about 150 mb. So no compression I think.
+
+ 
 ***Credits***
 
 - The picture taking part is largely based on the work of Ichi Hirota’s dual-fisheye plug-in <https://github.com/theta360developers/original-dual-fisheye-plugin>
