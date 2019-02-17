@@ -1,0 +1,2 @@
+include ':app', 'thetaSDK', ':pluginlibrary'
+include ':openCVLibrary344'
