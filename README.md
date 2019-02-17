@@ -1,42 +1,21 @@
  
 
 **HDR2EXR**
-
-
-
 A plugin for the Ricoh Theta V to make one HDR exr file. 
-
 Main use would be for on set VFX HDR capture.
-
- 
 
 ***There are enough HDR apps. What makes this one different?***
 
-1) It measures the on set lighting and bases it bracketing on that lighting situation. 
-
-It takes 1 auto exposed picture to determine basic exposure settings. 
-
-Based on that it set the lowest iso and then starts taking 11 bracked pictures with a 2 stop increase. This should be enough to capture almost every lighting situation. (I will experiment a bit more with this.) 
-
- 
+1) It measures the on set lighting and bases it bracketing on that lighting situation. It takes 1 auto exposed picture to determine basic exposure settings. Based on that it set the lowest iso and then starts taking 11 bracked pictures with a 2 stop increase. This should be enough to capture almost every lighting situation. (I will experiment a bit more with this.) 
 
 2) It automatically merges these 11 pictures into one EXR file ready to be used in NUKE, MAYA etc. (this is done through OpenCV hdr libraries.)
-
- 
-
- 
 
 ***How to install?***
 
 See the ricoh theta V forum for help with installing plugins. 
-
 https://plugin-dev-quickstart.readthedocs.io/en/latest/index.html
-
 - Make sure to set the permissions for camera and disk through the use of vysor (or scrcpy).
-
 - And make sure to set the plugin as the default plugin to use.
-
- 
 
 ***How to use?***
 
@@ -55,22 +34,7 @@ https://plugin-dev-quickstart.readthedocs.io/en/latest/index.html
 ***Credits***
 
 - The picture taking part is largely based on the work of Ichi Hirota’s dual-fisheye plug-in <https://github.com/theta360developers/original-dual-fisheye-plugin>
-
- 
-
-- The integration of OpenCV is a combination of 
-
-<https://community.theta360.guide/t/ricoh-blog-post-running-opencv-in-your-ricoh-theta/4084>
-
-and 
-
-<https://www.learn2crack.com/2016/03/setup-opencv-sdk-android-studio.html>
-
-and a lot of trail and error!
-
- 
-
- 
+- The integration of OpenCV is a combination of <https://community.theta360.guide/t/ricoh-blog-post-running-opencv-in-your-ricoh-theta/4084> and <https://www.learn2crack.com/2016/03/setup-opencv-sdk-android-studio.html> and a lot of trail and error!
 
 Feel free to change, improve and of course use!
 
