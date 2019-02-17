@@ -1,6 +1,7 @@
  
 
 **HDR2EXR**
+
 A plugin for the Ricoh Theta V to make one HDR exr file. 
 Main use would be for on set VFX HDR capture.
 
