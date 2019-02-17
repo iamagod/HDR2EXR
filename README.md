@@ -1,0 +1,1 @@
+A plugin for the Ricoh Theta V that takes 11 bracked pictures, middle pic is based on current light. And Merges them all to a HDR EXR file.
