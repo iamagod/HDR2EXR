@@ -43,28 +43,24 @@ Let me know what you think and run into!
 
 
 TODO v1
-
-- - make colors en sounds better
-- - exr half float support
-- - clean up code?
-- - do all dirs exist? if not create!
-- - are all permissions okey? no error...
-
-
+- make colors en sounds better
+- exr half float support
+- clean up code?
+- do all dirs exist? if not create!
+- are all permissions okey? no error...
 
 TODO v2
-
-- - add web interface
-- - turn sound on/off
-- - turn iso looping on/off
-- - exr half/full float on/off
-- - download exr
-- - name session
-- - viewer
-- - show status
-- - stops step setting?
-- - number of pics?
-
+- add web interface
+- turn sound on/off
+- turn iso looping on/off
+- exr half/full float on/off
+- download exr
+- name session
+- viewer
+- show status
+- stops step setting?
+- number of pics?
+- dng and exr support and option
   
 
  
