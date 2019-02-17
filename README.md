@@ -36,7 +36,7 @@ https://plugin-dev-quickstart.readthedocs.io/en/latest/index.html
 
 - The picture taking part is largely based on the work of Ichi Hirota’s dual-fisheye plug-in <https://github.com/theta360developers/original-dual-fisheye-plugin>
 - The integration of OpenCV is a combination of <https://community.theta360.guide/t/ricoh-blog-post-running-opencv-in-your-ricoh-theta/4084> and <https://www.learn2crack.com/2016/03/setup-opencv-sdk-android-studio.html> and a lot of trail and error!
-- The HDR part is baed on https://www.learnopencv.com/high-dynamic-range-hdr-imaging-using-opencv-cpp-python/
+- The HDR part is based on https://www.learnopencv.com/high-dynamic-range-hdr-imaging-using-opencv-cpp-python/
 
 Feel free to change, improve and of course use!
 
