@@ -34,6 +34,10 @@ https://plugin-dev-quickstart.readthedocs.io/en/latest/index.html
 ***Good to know***
 It tries to keep the iso as low as possible but also the the exposure time, when exposure gets above 1 sec, it increases iso (until it runs out of iso and then increases exposure time again ;-)  .)
 I haven't really tested the exr file fully so not sure how good it is. So some very high red pixel values on some shots I did. Probably needs a bit of time to look into. Exr file is also quite big, about 150 mb. So no compression I think.
+I think I might need to look into tonemapping.
+Also I had some errors on doing a second pass right after a first pass. Not sure why.
+This version works with OpenCV 3.4.4 I ran into to some problems with 4.0 which I couldn't fix right away.
+If you want to build it for yourself make sure to change the file paths in the Android.mk file (in the app folder).
 
  
 ***Credits***
@@ -54,6 +58,8 @@ TODO v1
 - clean up code?
 - do all dirs exist? if not create!
 - are all permissions okey? no error...
+- second pass errors
+- tonemapping/ very bright exr's on daylight.
 
 TODO v2
 - add web interface
