@@ -4,12 +4,15 @@
  * Added openCV support
  *
  * TODO v1
- * - make app standalone
  * - make colors en sounds better
  * - exr half float support
  * - clean up code?
  * - do all dirs exist? if not create!
  * - are all permissions okey? no error...
+ * - maybe get avarrage pixel value and divide by that?
+ * - get check if full white/black and stop
+ * - set check if expsoure values are the same
+ * - set fixed wb
  *
  * TODO v2
  * - add web interface
@@ -22,6 +25,7 @@
  * - show status
  * - stops step setting?
  * - number of pics?
+ * - dng and exr support
  */
 
 
@@ -89,7 +93,7 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
 
 
     int current_count = 0;
-    int tellen =0;
+
     String session_name ="";
     List<Mat> images = new ArrayList<Mat>(numberOfPictures);
 
@@ -121,9 +125,9 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
 
     static {
         if (OpenCVLoader.initDebug()) {
-            Log.i(TAG,"OpenCV initialize success fish");
+            Log.i(TAG,"OpenCV initialize success");
         } else {
-            Log.i(TAG, "OpenCV initialize failed fish");
+            Log.i(TAG, "OpenCV initialize failed");
         }
     }
     /* Called when the activity is first created. */
@@ -141,27 +145,17 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
             @Override
             public void onKeyDown(int keyCode, KeyEvent event) {
                 if (keyCode == KeyReceiver.KEYCODE_CAMERA) {
+                    // If on second run we need to reset everything.
                     notificationLedBlink(LedTarget.LED3, LedColor.GREEN, 300);
+                    current_count = 0;
+                    m_is_auto_pic = true;
+                    times = new Mat(numberOfPictures,1,org.opencv.core.CvType.CV_32F);
+                    images = new ArrayList<Mat>(numberOfPictures);
                     customShutter();
-
-    /*
-                    if(m_is_bracket){
-                        notificationLedBlink(LedTarget.LED3, LedColor.MAGENTA, 300);
-                    }
-                    else {
-                        notificationLedBlink(LedTarget.LED3, LedColor.CYAN, 2000);
-                    }*/
                 }
-                else if(keyCode == KeyReceiver.KEYCODE_WLAN_ON_OFF){
-                    //m_is_bracket = !m_is_bracket;
+                else if(keyCode == KeyReceiver.KEYCODE_WLAN_ON_OFF){ // Old code
                     notificationLedBlink(LedTarget.LED3, LedColor.MAGENTA, 300);
-/*
-                    if(m_is_bracket){
-                        notificationLedBlink(LedTarget.LED3, LedColor.MAGENTA, 300);
-                    }
-                    else {
-                        notificationLedBlink(LedTarget.LED3, LedColor.CYAN, 2000);
-                    }*/
+
                 }
             }
 
@@ -343,7 +337,7 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
             Log.d(TAG,"images is: "+Integer.toString(images.size()) );
             Log.d(TAG,"times length is: " + Long.toString(times.total()));
             notificationLedBlink(LedTarget.LED3, LedColor.BLUE, 300);
-
+            String opath ="";
 
             //Log.d(TAG,"starting align");
             //org.opencv.photo.AlignMTB align = org.opencv.photo.Photo.createAlignMTB();
@@ -361,14 +355,61 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
             org.opencv.photo.MergeDebevec mergeDebevec = org.opencv.photo.Photo.createMergeDebevec();
             Log.i(TAG,"Starting merge.");
             mergeDebevec.process(images, hdrDebevec, times, responseDebevec);
+
             // Save HDR image.
-            Log.i(TAG,"Saving file.");
-            String opath = Environment.getExternalStorageDirectory().getPath()+ "/DCIM/100RICOH/" + session_name + ".exr";
+            //Log.i(TAG,"Saving file.");
+            opath = Environment.getExternalStorageDirectory().getPath()+ "/DCIM/100RICOH/" + session_name + ".exr";
             Log.i(TAG,"Saving file as " + opath + ".");
             //para = {org.opencv.imgcodecs.Imgcodecs.IMWRITE_EXR_TYPE, org.opencv.imgcodecs.Imgcodecs.IMWRITE_EXR_TYPE_HALF};
             imwrite(opath, hdrDebevec);
 
             Log.i(TAG,"HDR save done.");
+
+            /*merge_mertens = cv2.createMergeMertens()
+            res_mertens = merge_mertens.process(img_list)*/
+            /*
+            Mat hdrMertens = new Mat();
+            org.opencv.photo.MergeMertens mergeMertens = org.opencv.photo.Photo.createMergeMertens();
+            Log.i(TAG,"Starting Mertens merge.");
+            mergeMertens.process(images,hdrMertens);
+
+
+            opath = Environment.getExternalStorageDirectory().getPath()+ "/DCIM/100RICOH/" + session_name + "_Mertens.exr";
+            Log.i(TAG,"Saving Mertens file as " + opath + ".");
+            //para = {org.opencv.imgcodecs.Imgcodecs.IMWRITE_EXR_TYPE, org.opencv.imgcodecs.Imgcodecs.IMWRITE_EXR_TYPE_HALF};
+            imwrite(opath, hdrMertens);
+
+            Log.i(TAG,"HDR Mertens save done.");
+
+            */
+            /*
+
+            Log.i(TAG,"Starting Robertson calibration.");
+
+            Mat responseRobertson = new Mat();
+            org.opencv.photo.CalibrateRobertson calibrateRobertson = org.opencv.photo.Photo.createCalibrateRobertson();
+            calibrateRobertson.process(images, responseRobertson, times);
+
+            Log.i(TAG,"Preping Robertson merge.");
+
+            Mat hdrRobertson = new Mat();
+            org.opencv.photo.MergeRobertson mergeRobertson = org.opencv.photo.Photo.createMergeRobertson();
+            Log.i(TAG,"Starting Robertson merge.");
+            mergeRobertson.process(images, hdrRobertson, times, responseRobertson);
+
+            // Save HDR image.
+            //Log.i(TAG,"Saving Robertson file.");
+            opath = Environment.getExternalStorageDirectory().getPath()+ "/DCIM/100RICOH/" + session_name + "_Robertson.exr";
+            Log.i(TAG,"Saving Robertson file as " + opath + ".");
+            //para = {org.opencv.imgcodecs.Imgcodecs.IMWRITE_EXR_TYPE, org.opencv.imgcodecs.Imgcodecs.IMWRITE_EXR_TYPE_HALF};
+            imwrite(opath, hdrRobertson);
+
+            Log.i(TAG,"HDR save done.");
+
+            */
+
+
+
 
             Log.i(TAG,"----- JOB DONE -----");
             notificationLedBlink(LedTarget.LED3, LedColor.MAGENTA, 300);
@@ -383,7 +424,7 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
     private double find_closest_shutter(double shutter_in)
     {
         int i;
-        for( i=1; i<60; i++){
+        for( i=0; i<60; i++){
             if (shutter_table[i][1] > shutter_in) {
                 break;
             }
@@ -538,12 +579,8 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
 
                     if (!extra.contains("auto_pic")) // setup opencv array for hdr merge
                             {
-                                images.add( imread(opath));
-                                tellen++;
-                                Log.d(TAG,"We tellen: "+Integer.toString(tellen));
-
+                                images.add(imread(opath));
                             };
-
 
                     String shutter_str = exif.getAttribute(ExifInterface.TAG_SHUTTER_SPEED_VALUE);
                     Float shutter_flt = (Float.parseFloat(shutter_str.split("/")[0]) / Float.parseFloat(shutter_str.split("/")[1]));
@@ -570,9 +607,6 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
                             "_shutter" + shutter_speed_string +
                             "sec.jpg";
                     //File filenew = ;
-
-
-
 
                     new File(opath).renameTo(new File(opath_new));
                     Log.i(TAG,"Saving file " + opath_new);
