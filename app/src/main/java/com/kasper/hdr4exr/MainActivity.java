@@ -5,14 +5,15 @@
  *
  * TODO v1
  * - make colors en sounds better
- * - exr half float support
  * - clean up code?
  * - do all dirs exist? if not create!
  * - are all permissions okey? no error...
- * - maybe get average pixel value and divide by that?
  * - get check if full white/black and stop
- * - set check if expsoure values are the same
+ * - set check if exposure values are the same
  * - set fixed wb
+ * - split in two seperate pieces with unstiched version to get seperate crc
+ * - save crc to disk
+ * - load highend src from disk
  *
  * TODO v2
  * - add web interface
@@ -33,7 +34,6 @@
 //package com.theta360.pluginapplication;
 package com.kasper.hdr4exr;
 
-//import com.kasper.hdr4exr.R;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
@@ -57,8 +57,6 @@ import java.lang.String;
 
 import org.opencv.core.MatOfInt;
 import org.opencv.core.Scalar;
-//import org.opencv.core.Core.mean;
-import org.opencv.imgcodecs.Imgcodecs;
 
 import com.theta360.pluginlibrary.activity.PluginActivity;
 import com.theta360.pluginlibrary.callback.KeyCallback;
@@ -75,6 +73,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.StringTokenizer;
 import java.text.DecimalFormat;
+import java.util.Arrays;
 
 import static java.lang.Thread.sleep;
 import java.util.ArrayList;
@@ -90,7 +89,6 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
     private static final int shutterSpeedSpacing = 6;
     private static final Double stop_jumps = 1.0;
 
-    //static int IMWRITE_EXR_TYPE = 1;
 
 
     Double[][] bracket_array = new Double[numberOfPictures][4];
@@ -253,12 +251,12 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
         //Log.d("shooting mode", params.flatten());
         params.set("RIC_SHOOTING_MODE", "RicStillCaptureStd");
 
-        //params.set("RIC_PROC_STITCHING", "RicNonStitching");
-        //params.setPictureSize(5792, 2896); // no stiching
+        params.set("RIC_PROC_STITCHING", "RicNonStitching");
+        params.setPictureSize(5792, 2896); // no stiching
 
         params.setPictureFormat(ImageFormat.JPEG);
         params.set("jpeg-quality",100);
-        params.setPictureSize(5376, 2688); // stiched
+        //params.setPictureSize(5376, 2688); // stiched
 
         // https://api.ricoh/docs/theta-plugin-reference/camera-api/
         //Shutter speed. To convert this value to ordinary 'Shutter Speed';
@@ -367,29 +365,26 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
             //Log.i(TAG,"Saving file.");
             opath = Environment.getExternalStorageDirectory().getPath()+ "/DCIM/100RICOH/" + session_name + ".exr";
             Log.i(TAG,"Saving file as " + opath + ".");
-            //para = {org.opencv.imgcodecs.Imgcodecs.IMWRITE_EXR_TYPE, org.opencv.imgcodecs.Imgcodecs.IMWRITE_EXR_TYPE_HALF};
-            //org.opencv.imgcodecs.Imgcodecs.CV_IMWRITE_EXR_TYPE = org.opencv.imgcodecs.Imgcodecs.IMWRITE_EXR_TYPE_HALF << 4;
             compressParams = new MatOfInt(org.opencv.imgcodecs.Imgcodecs.CV_IMWRITE_EXR_TYPE, org.opencv.imgcodecs.Imgcodecs.IMWRITE_EXR_TYPE_HALF);
 
-            //imwrite(opath, hdrDebevec,compressParams);
 
-            // we divide by the mean value of the whole picture to get the exposure values with a proper range.
-            Mat divide_hdr  = new Mat();
+            //We divide by the mean value of the whole picture to get the exposure values with a proper range.
+
+            //Mat divide_hdr  = new Mat();
+
             Scalar mean =  org.opencv.core.Core.mean(hdrDebevec);
             Log.d(TAG,"Mean: " + mean.toString());
             double new_mean = (mean.val[0]+mean.val[1]+mean.val[2])/3.0;
             Log.i(TAG,"Average Mean: " + Double.toString(new_mean));
-            org.opencv.core.Core.divide(hdrDebevec,new Scalar(new_mean,new_mean,new_mean,0),divide_hdr);
+            org.opencv.core.Core.divide(hdrDebevec,new Scalar(new_mean,new_mean,new_mean,0),hdrDebevec);
 
-            opath = Environment.getExternalStorageDirectory().getPath()+ "/DCIM/100RICOH/" + session_name + "_mean.exr";
-            imwrite(opath, divide_hdr,compressParams);
+            //opath = Environment.getExternalStorageDirectory().getPath()+ "/DCIM/100RICOH/" + session_name + "_mean.exr";
+            imwrite(opath, hdrDebevec,compressParams);
 
             Log.i(TAG,"HDR save done.");
 
             Log.i(TAG,"----- JOB DONE -----");
             notificationLedBlink(LedTarget.LED3, LedColor.MAGENTA, 300);
-
-
 
             Intent intent = new Intent("com.theta360.plugin.ACTION_AUDIO_SH_CLOSE");
             sendBroadcast(intent);
@@ -544,6 +539,9 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
                         current_count++;
 
                     }
+
+                    //sort array from high to low
+                    Arrays.sort(bracket_array, (a, b) -> Double.compare(a[2], b[2]));
 
                     String opath = Environment.getExternalStorageDirectory().getPath()+ "/DCIM/100RICOH/" +  session_name + "/" + extra + ".jpg";
                     //String opath = Environment.getExternalStorageDirectory().getPath()+ "/DCIM/100RICOH/IMG_" + Integer.toString(current_count) + ".JPG";
