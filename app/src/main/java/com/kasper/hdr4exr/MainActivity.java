@@ -397,10 +397,6 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
             mCamera.takePicture(null, null, null, pictureListener);
         }
         else{
-            // reset shutterSpeedValue
-            //shutterSpeedValue = 0;
-
-
             //////////////////////////////////////////////////////////////////////////
             //                                                                      //
             //                          HDR MERGE                                   //
