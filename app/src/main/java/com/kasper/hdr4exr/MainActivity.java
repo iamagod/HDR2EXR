@@ -5,15 +5,17 @@
  *
  * TODO v1
  * - make colors en sounds better
- * - clean up code?
  * - do all dirs exist? if not create!
  * - are all permissions okey? no error...
  * - get check if full white/black and stop
  * - set check if exposure values are the same
  * - set fixed wb
- * - split in two seperate pieces with unstiched version to get seperate crc
- * - save crc to disk
- * - load highend src from disk
+ * - split in two seperate pieces with unstiched version to get seperate crc -> weird crash -> maybe split stiched pic in two?
+ * - do not always generate response curve to save time
+ * - maybe export default python script to recreate hdri offline?
+ * - load highend crc from disk
+ * - add dng en tonemapped jpg to output
+ * - support opencv 4
  *
  * TODO v2
  * - add web interface
@@ -48,15 +50,29 @@ import android.view.KeyEvent;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.support.media.ExifInterface;
+import android.view.ViewDebug;
 
 import org.opencv.android.OpenCVLoader;
+
+import static org.opencv.core.CvType.typeToString;
 import static org.opencv.imgcodecs.Imgcodecs.imread;
 import static org.opencv.imgcodecs.Imgcodecs.imwrite;
+
+import org.opencv.core.Core;
+import org.opencv.core.CvType;
 import org.opencv.core.Mat;
+
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.lang.String;
 
 import org.opencv.core.MatOfInt;
 import org.opencv.core.Scalar;
+
+
 
 import com.theta360.pluginlibrary.activity.PluginActivity;
 import com.theta360.pluginlibrary.callback.KeyCallback;
@@ -73,7 +89,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.StringTokenizer;
 import java.text.DecimalFormat;
-import java.util.Arrays;
+
 
 import static java.lang.Thread.sleep;
 import java.util.ArrayList;
@@ -83,29 +99,36 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
     private Camera mCamera = null;
     private Context mcontext;
     private int bcnt = 0; //bracketing count
-    private int shutterSpeedValue = 0;  // can be 0 to 62. 0 is 1/25000
 
-    private static final int numberOfPictures = 13;
-    private static final int shutterSpeedSpacing = 6;
-    private static final Double stop_jumps = 1.0;
-
-
+    private static final int numberOfPictures = 11;  // number of pictures for the bracket
+    private static final Double stop_jumps = 2.5; // stops jump between each bracket
+    private static final int number_of_noise_pics = 3; // number of pictures take for noise reduction
 
     Double[][] bracket_array = new Double[numberOfPictures][4];
-    Mat times = new Mat(numberOfPictures,1,org.opencv.core.CvType.CV_32F);
+    Mat times = new Mat(numberOfPictures,1,CvType.CV_32F);
 
 
     int current_count = 0;
+    int noise_count = number_of_noise_pics;
+
+    int cols = 5376;
+    int rows = 2688;
+
+    ArrayList<String> filename_array = new ArrayList<String>();
+    ArrayList<String> images_filename_array = new ArrayList<String>();
 
     String session_name ="";
     List<Mat> images = new ArrayList<Mat>(numberOfPictures);
+    Mat average_pic = new Mat();
+    Mat temp_pic = new Mat();
+    Mat average_pic_jpg = new Mat();
+
+    // Set exr file to half float --> smaller files
+    private MatOfInt compressParams = new MatOfInt(org.opencv.imgcodecs.Imgcodecs.CV_IMWRITE_EXR_TYPE, org.opencv.imgcodecs.Imgcodecs.IMWRITE_EXR_TYPE_HALF);
 
     // true will start with bracket
     private boolean m_is_bracket = true;
     private boolean m_is_auto_pic = true;
-
-    private MatOfInt compressParams;
-
 
     Double shutter_table[][] =
             {
@@ -123,7 +146,8 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
                     {45.0,	1.3}, {46.0,	1.6}, {47.0,	2.0}, {48.0,	2.5},
                     {49.0,	3.2}, {50.0,	4.0}, {51.0,	5.0}, {52.0,	6.0},
                     {53.0,	8.0}, {54.0,	10.0}, {55.0,	13.0}, {56.0,	15.0},
-                    {57.0,	20.0}, {58.0,	25.0}, {59.0,	30.0}, {60.0,	60.0}
+                    {57.0,	20.0}, {58.0,	25.0}, {59.0,	30.0}, {59.0,	40.0}, {59.0,	50.0},{60.0,	60.0},
+                    {60.0,	80.0},{60.0,	100.0}, {60.0,	120.0},{60.0,	140.0},{60.0,	160.0}, {60.0,	180.0},{60.0,	200.0}
             };
 
     private static final String TAG = "MainActivity";
@@ -135,10 +159,34 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
             Log.i(TAG, "OpenCV initialize failed");
         }
     }
+
+
+
+    public void LoadText(int resourceId) {
+        // The InputStream opens the resourceId and sends it to the buffer
+        InputStream is = this.getResources().openRawResource(resourceId);
+        BufferedReader br = new BufferedReader(new InputStreamReader(is));
+        String readLine = null;
+
+        try {
+            // While the BufferedReader readLine is not null
+            while ((readLine = br.readLine()) != null) {
+                Log.i(TAG, readLine);
+            }
+
+            // Close the InputStream and BufferedReader
+            is.close();
+            br.close();
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+
     /* Called when the activity is first created. */
     @Override
     public void onCreate(Bundle savedInstanceState) {
-
 
         super.onCreate(savedInstanceState);
         setContentView(R.layout.camera_main);
@@ -156,6 +204,9 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
                     m_is_auto_pic = true;
                     times = new Mat(numberOfPictures,1,org.opencv.core.CvType.CV_32F);
                     images = new ArrayList<Mat>(numberOfPictures);
+                    //images_before_avg = new ArrayList<Mat>(numberOfPictures * number_of_noise_pics);
+
+
                     customShutter();
                 }
                 else if(keyCode == KeyReceiver.KEYCODE_WLAN_ON_OFF){ // Old code
@@ -200,6 +251,8 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
     public void surfaceCreated(SurfaceHolder holder) {
 
         Log.i(TAG,"Camera opened");
+        //LoadText(R.raw.master_crc_kasper);
+
         Intent intent = new Intent("com.theta360.plugin.ACTION_MAIN_CAMERA_CLOSE");
         sendBroadcast(intent);
         mCamera = Camera.open();
@@ -251,12 +304,14 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
         //Log.d("shooting mode", params.flatten());
         params.set("RIC_SHOOTING_MODE", "RicStillCaptureStd");
 
-        params.set("RIC_PROC_STITCHING", "RicNonStitching");
-        params.setPictureSize(5792, 2896); // no stiching
+        //params.set("RIC_PROC_STITCHING", "RicNonStitching");
+        //params.setPictureSize(5792, 2896); // no stiching
 
         params.setPictureFormat(ImageFormat.JPEG);
         params.set("jpeg-quality",100);
         //params.setPictureSize(5376, 2688); // stiched
+        params.setPictureSize(cols, rows);
+
 
         // https://api.ricoh/docs/theta-plugin-reference/camera-api/
         //Shutter speed. To convert this value to ordinary 'Shutter Speed';
@@ -272,7 +327,7 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
         // proper lighting settings to use a our middle exposure value
         params.set("RIC_EXPOSURE_MODE", "RicAutoExposureP");
 
-        bcnt = numberOfPictures;
+        bcnt = numberOfPictures * number_of_noise_pics;
 
 
 
@@ -289,7 +344,7 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
         //3sec delay timer to run away
 
         try{
-            sleep(3000);
+            sleep(5000);
         } catch (InterruptedException e) {
             //e.printStackTrace();
             Log.i(TAG,"Sleep error.");
@@ -312,7 +367,7 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
         if(bcnt > 0) {
             params = mCamera.getParameters();
             params.set("RIC_SHOOTING_MODE", "RicStillCaptureStd");
-            shutterSpeedValue = shutterSpeedValue + shutterSpeedSpacing;
+            //shutterSpeedValue = shutterSpeedValue + shutterSpeedSpacing;
             if ( m_is_auto_pic) {
                 // So here we take our first picture on full auto settings to get
                 // proper lighting settings to use a our middle exposure value
@@ -326,6 +381,13 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
                 // for future possibilities we add this but it turns out to be discarded
                 params.set("RIC_MANUAL_EXPOSURE_TIME_FRONT", bracket_array[current_count][1].intValue());
                 params.set("RIC_MANUAL_EXPOSURE_ISO_FRONT",  bracket_array[current_count][0].intValue());
+
+                // always fic wb to 6500 to make sure pictures are taken in same way
+                // exif info doesn't take this value. so you can only visually verify
+                //params.set("RIC_WB_MODE",  "RicWbPrefixTemperature");
+                //params.set("RIC_WB_TEMPERATURE",  "5100");
+
+
             }
 
             bcnt = bcnt - 1;
@@ -336,10 +398,18 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
         }
         else{
             // reset shutterSpeedValue
-            shutterSpeedValue = 0;
+            //shutterSpeedValue = 0;
+
+
+            //////////////////////////////////////////////////////////////////////////
+            //                                                                      //
+            //                          HDR MERGE                                   //
+            //                                                                      //
+            //////////////////////////////////////////////////////////////////////////
 
             Log.i(TAG,"Done with picture taking, let's start with the HDR merge.");
-            Log.d(TAG,"images is: "+Integer.toString(images.size()) );
+
+            //Log.d(TAG,"images is: "+Integer.toString(images_before_avg.size()) );
             Log.d(TAG,"times length is: " + Long.toString(times.total()));
             notificationLedBlink(LedTarget.LED3, LedColor.BLUE, 300);
             String opath ="";
@@ -347,30 +417,132 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
             //Log.d(TAG,"starting align");
             //org.opencv.photo.AlignMTB align = org.opencv.photo.Photo.createAlignMTB();
             //align.process(images,images);
+            if (number_of_noise_pics==1){
+                images_filename_array = filename_array;
+            }
+            else {
+                Log.i(TAG, "Merging average pics for denoise.");
+                for (Integer i = 0; i < numberOfPictures; i++) {
+                    average_pic = new Mat(rows, cols, CvType.CV_32FC3, new Scalar((float) (0.0), (float) (0.0), (float) (0.0)));
+
+                    for (Integer j = 0; j < number_of_noise_pics; j++) {
+                        notificationLedBlink(LedTarget.LED3, LedColor.RED, 300);
+                        temp_pic = imread(filename_array.get(i * number_of_noise_pics + j));
+                        temp_pic.convertTo(temp_pic, CvType.CV_32FC3);
+                        Core.add(average_pic, temp_pic, average_pic);
+                        temp_pic.release();
+                        notificationLedBlink(LedTarget.LED3, LedColor.BLUE, 300);
+
+                    }
+                    org.opencv.core.Core.divide(average_pic, new Scalar(((float) number_of_noise_pics + 0.0),
+                            ((float) number_of_noise_pics + 0.0),
+                            ((float) number_of_noise_pics + 0.0)), average_pic);
+                    Log.i(TAG, "Total average value " + Double.toString(average_pic.get(1, 1)[0]));
+
+                    opath = filename_array.get(i * number_of_noise_pics + number_of_noise_pics - 1);
+                    opath = opath.replace("c1", "avg");
+                    Log.i(TAG, "Saving Averaged file as " + opath + ".");
+                    notificationLedBlink(LedTarget.LED3, LedColor.RED, 300);
+                    imwrite(opath, average_pic);
+                    average_pic.release();
+                    images_filename_array.add(opath);
+                }
+            }
+            notificationLedBlink(LedTarget.LED3, LedColor.BLUE, 300);
+            images = new ArrayList<Mat>(numberOfPictures);
+            for (Integer i=0;i<numberOfPictures; i++)
+            {
+                String name = images_filename_array.get(i);
+                Log.d(TAG,"Adding file "+ name);
+                images.add(imread(name));
+            }
+
 
             Log.i(TAG,"Starting calibration.");
+            notificationLedBlink(LedTarget.LED3, LedColor.RED, 300);
+            Mat responseDebevec = new Mat(256,1,CvType.CV_32FC3,new Scalar((float) (0.0), (float) (0.0), (float) (0.0)));
+            //org.opencv.photo.CalibrateDebevec calibrateDebevec = org.opencv.photo.Photo.createCalibrateDebevec(70,100,false);
+            //calibrateDebevec.process(images, responseDebevec, times);
 
-            Mat responseDebevec = new Mat();
-            org.opencv.photo.CalibrateDebevec calibrateDebevec = org.opencv.photo.Photo.createCalibrateDebevec();
-            calibrateDebevec.process(images, responseDebevec, times);
+
+            // The InputStream opens the resourceId and sends it to the buffer
+            InputStream is = this.getResources().openRawResource(R.raw.master_crc_kasper);
+            BufferedReader br = new BufferedReader(new InputStreamReader(is));
+            String readLine = null;
+
+            try {
+                // While the BufferedReader readLine is not null
+                Integer i =0;
+                double[] data = new double[3];
+                while ((readLine = br.readLine()) != null) {
+                    //Log.i(TAG, readLine);
+                    data[0] = Double.valueOf(readLine.split(" ")[0]);
+                    data[1] = Double.valueOf(readLine.split(" ")[1]);
+                    data[2] = Double.valueOf(readLine.split(" ")[2]);
+                    responseDebevec.put(i,0,data);
+                    i++;
+                }
+
+                // Close the InputStream and BufferedReader
+                is.close();
+                br.close();
+
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
+
+
+            Log.i(TAG,"Calibration done, start saving curves.");
+            notificationLedBlink(LedTarget.LED3, LedColor.BLUE, 300);
+
+            try
+            {
+                // We save the Camera Curve to disk
+                String filename = Environment.getExternalStorageDirectory().getPath()+ "/DCIM/100RICOH/" + session_name + "/CameraCurve.txt";
+                BufferedWriter writer = new BufferedWriter(new FileWriter(filename));
+                for( Integer i=0; i<responseDebevec.rows(); i++)
+                {
+                    for( Integer j=0; j<responseDebevec.cols(); j++)
+                    {
+                        writer.write(Double.toString(responseDebevec.get(i,j)[0])+" "+
+                                         Double.toString(responseDebevec.get(i,j)[1])+" "+
+                                         Double.toString(responseDebevec.get(i,j)[2])+"\n");
+
+                    }
+                }
+                writer.close();
+                Log.i(TAG,"Calibration done saving times.");
+
+                // We save the exposure times to disk
+                filename = Environment.getExternalStorageDirectory().getPath()+ "/DCIM/100RICOH/" + session_name + "/Times.txt";
+                writer = new BufferedWriter(new FileWriter(filename));
+                for( Integer i=0; i<numberOfPictures; i++)
+                {
+                    writer.write(Double.toString(times.get(i,0)[0])+"\n");
+                }
+                writer.close();
+            }
+            catch(IOException e)
+            {
+                Log.i(TAG,"IO error");
+            }
+            notificationLedBlink(LedTarget.LED3, LedColor.RED, 300);
 
             Log.i(TAG,"Preping merge.");
-
             Mat hdrDebevec = new Mat();
             org.opencv.photo.MergeDebevec mergeDebevec = org.opencv.photo.Photo.createMergeDebevec();
+            notificationLedBlink(LedTarget.LED3, LedColor.BLUE, 300);
             Log.i(TAG,"Starting merge.");
             mergeDebevec.process(images, hdrDebevec, times, responseDebevec);
 
-            // Save HDR image.
-            //Log.i(TAG,"Saving file.");
-            opath = Environment.getExternalStorageDirectory().getPath()+ "/DCIM/100RICOH/" + session_name + ".exr";
-            Log.i(TAG,"Saving file as " + opath + ".");
-            compressParams = new MatOfInt(org.opencv.imgcodecs.Imgcodecs.CV_IMWRITE_EXR_TYPE, org.opencv.imgcodecs.Imgcodecs.IMWRITE_EXR_TYPE_HALF);
+            // Start Saving HDR Files.
 
+            //opath = Environment.getExternalStorageDirectory().getPath()+ "/DCIM/100RICOH/" + session_name + ".exr";
+            //Log.i(TAG,"Saving unAveraged file as " + opath + ".");
+            //imwrite(opath, hdrDebevec,compressParams);
 
             //We divide by the mean value of the whole picture to get the exposure values with a proper range.
-
-            //Mat divide_hdr  = new Mat();
 
             Scalar mean =  org.opencv.core.Core.mean(hdrDebevec);
             Log.d(TAG,"Mean: " + mean.toString());
@@ -378,10 +550,34 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
             Log.i(TAG,"Average Mean: " + Double.toString(new_mean));
             org.opencv.core.Core.divide(hdrDebevec,new Scalar(new_mean,new_mean,new_mean,0),hdrDebevec);
 
-            //opath = Environment.getExternalStorageDirectory().getPath()+ "/DCIM/100RICOH/" + session_name + "_mean.exr";
+            opath = Environment.getExternalStorageDirectory().getPath()+ "/DCIM/100RICOH/" + session_name + "_mean.exr";
+            Log.i(TAG,"Saving Averaged file as " + opath + ".");
+            notificationLedBlink(LedTarget.LED3, LedColor.RED, 300);
             imwrite(opath, hdrDebevec,compressParams);
 
-            Log.i(TAG,"HDR save done.");
+
+            Log.i(TAG,"Starting Tonemapping.");
+
+            Mat ldrDrago = new Mat();
+            org.opencv.photo.TonemapDrago tonemapDrago = org.opencv.photo.Photo.createTonemapDrago((float)1.0,(float)0.7);
+            Log.i(TAG,"done creating tonemap.");
+
+            tonemapDrago.process(hdrDebevec, ldrDrago);
+            //ldrMantiuk = 3 * ldrMantiuk;
+            Log.i(TAG,"Multiplying tonemap.");
+
+            org.opencv.core.Core.multiply(ldrDrago, new Scalar(3*255,3*255,3*255), ldrDrago);
+
+            notificationLedBlink(LedTarget.LED3, LedColor.BLUE, 300);
+            opath = Environment.getExternalStorageDirectory().getPath()+ "/DCIM/100RICOH/" + session_name + "_tonemap.jpg";
+            Log.i(TAG,"Saving tonemapped file as " + opath + ".");
+            //org.opencv.core.Core.multiply(ldrMantiuk, new Scalar(255,255,255), ldrMantiuk);
+            imwrite(opath, ldrDrago );
+
+            Log.i(TAG,"File saving done.");
+            hdrDebevec.release();
+            ldrDrago.release();
+            responseDebevec.release();
 
             Log.i(TAG,"----- JOB DONE -----");
             notificationLedBlink(LedTarget.LED3, LedColor.MAGENTA, 300);
@@ -394,7 +590,7 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
     private double find_closest_shutter(double shutter_in)
     {
         int i;
-        for( i=0; i<60; i++){
+        for( i=0; i<shutter_table.length; i++){
             if (shutter_table[i][1] > shutter_in) {
                 break;
             }
@@ -416,6 +612,7 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
                     // get picture info, iso and shutter
                     Camera.Parameters params = mCamera.getParameters();
                     String flattened = params.flatten();
+                    Log.d(TAG,flattened);
                     StringTokenizer tokenizer = new StringTokenizer(flattened, ";");
                     String text;
                     String cur_shutter = "";
@@ -526,22 +723,34 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
                     }
                     else // not auto pic so we are in bracket loop
                     {
+                        String nul ="";
+                        if (current_count<10){nul ="0";}
                         if ( (current_count & 1) == 0 ) {
                             //even is min
-                            extra = "i" + Integer.toString(current_count) + "_m" + Integer.toString(Math.abs(bracket_array[current_count][2].intValue()));
+
+                            extra = "i" + nul + Integer.toString(current_count) + "_m" + Integer.toString(Math.abs(bracket_array[current_count][2].intValue()));
                         }
                         else
                         {
                             //oneven is plus
-                            extra = "i" + Integer.toString(current_count) + "_p" + Integer.toString(bracket_array[current_count][2].intValue());
+                            extra = "i" + nul + Integer.toString(current_count) + "_p" + Integer.toString(bracket_array[current_count][2].intValue());
                         }
 
-                        current_count++;
+                        extra += "_c" + Integer.toString(noise_count);
+                        if (noise_count == 1)
+                        {
+                            current_count++;
+                            noise_count = number_of_noise_pics;
+                        }
+                        else
+                        {
+                            noise_count--;
+                        }
 
                     }
 
                     //sort array from high to low
-                    Arrays.sort(bracket_array, (a, b) -> Double.compare(a[2], b[2]));
+                    //Arrays.sort(bracket_array, (a, b) -> Double.compare(a[2], b[2]));
 
                     String opath = Environment.getExternalStorageDirectory().getPath()+ "/DCIM/100RICOH/" +  session_name + "/" + extra + ".jpg";
                     //String opath = Environment.getExternalStorageDirectory().getPath()+ "/DCIM/100RICOH/IMG_" + Integer.toString(current_count) + ".JPG";
@@ -549,12 +758,13 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
                     fos = new FileOutputStream(opath);
                     fos.write(data);
                     ExifInterface exif = new ExifInterface(opath);
-
+/*
                     if (!extra.contains("auto_pic")) // setup opencv array for hdr merge
                             {
-                                images.add(imread(opath));
-                            };
-
+                                //Log.i(TAG,"adding to whole: "+opath);
+                                images_before_avg.add(imread(opath));
+                            }
+*/
                     String shutter_str = exif.getAttribute(ExifInterface.TAG_SHUTTER_SPEED_VALUE);
                     Float shutter_flt = (Float.parseFloat(shutter_str.split("/")[0]) / Float.parseFloat(shutter_str.split("/")[1]));
                     String out ="";
@@ -580,6 +790,11 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
                             "_shutter" + shutter_speed_string +
                             "sec.jpg";
                     //File filenew = ;
+
+                    if (!extra.contains("auto_pic")) // save filename for easy retreive later on
+                    {
+                        filename_array.add(opath_new);
+                    }
 
                     new File(opath).renameTo(new File(opath_new));
                     Log.i(TAG,"Saving file " + opath_new);
