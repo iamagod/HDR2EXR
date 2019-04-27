@@ -4,18 +4,18 @@
  * Added openCV support
  *
  * TODO v1
- * - make colors en sounds better
- * - do all dirs exist? if not create!
- * - are all permissions okey? no error...
- * - get check if full white/black and stop
- * - set check if exposure values are the same
- * - set fixed wb
+ * - make colors and sounds better
+ * - fix whitebalance problems
+ * - support tonemapped jpg in theta default app
+ * - look into download of exr
+ *
+ * TODO ideas
  * - split in two seperate pieces with unstiched version to get seperate crc -> weird crash -> maybe split stiched pic in two?
- * - do not always generate response curve to save time
- * - maybe export default python script to recreate hdri offline?
- * - load highend crc from disk
- * - add dng en tonemapped jpg to output
+ * - export default python script to recreate hdri offline?
+ * - add dng  to output -> supprt adobe dng sdk
  * - support opencv 4
+ * - fix black hole sun
+ * - support Z1
  *
  * TODO v2
  * - add web interface
@@ -104,7 +104,7 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
     private static final Double stop_jumps = 2.5; // stops jump between each bracket
     private static final int number_of_noise_pics = 3; // number of pictures take for noise reduction
 
-    Double[][] bracket_array = new Double[numberOfPictures][4];
+    Double[][] bracket_array = new Double[numberOfPictures][5];
     Mat times = new Mat(numberOfPictures,1,CvType.CV_32F);
 
 
@@ -117,6 +117,10 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
     ArrayList<String> filename_array = new ArrayList<String>();
     ArrayList<String> images_filename_array = new ArrayList<String>();
 
+
+    String auto_pic;
+    byte[] saved_white_data;
+    String white_picture ="";
     String session_name ="";
     List<Mat> images = new ArrayList<Mat>(numberOfPictures);
     Mat average_pic = new Mat();
@@ -368,19 +372,17 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
             params = mCamera.getParameters();
             params.set("RIC_SHOOTING_MODE", "RicStillCaptureStd");
             //shutterSpeedValue = shutterSpeedValue + shutterSpeedSpacing;
-            if ( m_is_auto_pic) {
+            if (m_is_auto_pic) {
                 // So here we take our first picture on full auto settings to get
                 // proper lighting settings to use a our middle exposure value
                 params.set("RIC_EXPOSURE_MODE", "RicAutoExposureP");
-            }
-            else
-            {
+            } else {
                 params.set("RIC_EXPOSURE_MODE", "RicManualExposure");
                 params.set("RIC_MANUAL_EXPOSURE_TIME_REAR", bracket_array[current_count][1].intValue());
-                params.set("RIC_MANUAL_EXPOSURE_ISO_REAR",  bracket_array[current_count][0].intValue());
+                params.set("RIC_MANUAL_EXPOSURE_ISO_REAR", bracket_array[current_count][0].intValue());
                 // for future possibilities we add this but it turns out to be discarded
                 params.set("RIC_MANUAL_EXPOSURE_TIME_FRONT", bracket_array[current_count][1].intValue());
-                params.set("RIC_MANUAL_EXPOSURE_ISO_FRONT",  bracket_array[current_count][0].intValue());
+                params.set("RIC_MANUAL_EXPOSURE_ISO_FRONT", bracket_array[current_count][0].intValue());
 
                 // always fic wb to 6500 to make sure pictures are taken in same way
                 // exif info doesn't take this value. so you can only visually verify
@@ -391,11 +393,22 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
             }
 
             bcnt = bcnt - 1;
-            mCamera.setParameters(params);
-            Intent intent = new Intent("com.theta360.plugin.ACTION_AUDIO_SHUTTER");
-            sendBroadcast(intent);
-            mCamera.takePicture(null, null, null, pictureListener);
+            if (bracket_array[current_count][4] == 1.0)
+            {
+                mCamera.setParameters(params);
+                Intent intent = new Intent("com.theta360.plugin.ACTION_AUDIO_SHUTTER");
+                sendBroadcast(intent);
+                mCamera.takePicture(null, null, null, pictureListener);
+            }
+            else
+            {
+                // full white going on
+                Log.i(TAG,"Full white picture copy.");
+                pictureListener.onPictureTaken(saved_white_data,mCamera);
+
+            }
         }
+
         else{
             //////////////////////////////////////////////////////////////////////////
             //                                                                      //
@@ -546,7 +559,7 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
             Log.i(TAG,"Average Mean: " + Double.toString(new_mean));
             org.opencv.core.Core.divide(hdrDebevec,new Scalar(new_mean,new_mean,new_mean,0),hdrDebevec);
 
-            opath = Environment.getExternalStorageDirectory().getPath()+ "/DCIM/100RICOH/" + session_name + "_mean.exr";
+            opath = Environment.getExternalStorageDirectory().getPath()+ "/DCIM/100RICOH/" + session_name + ".EXR";
             Log.i(TAG,"Saving Averaged file as " + opath + ".");
             notificationLedBlink(LedTarget.LED3, LedColor.RED, 300);
             imwrite(opath, hdrDebevec,compressParams);
@@ -565,11 +578,25 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
             org.opencv.core.Core.multiply(ldrDrago, new Scalar(3*255,3*255,3*255), ldrDrago);
 
             notificationLedBlink(LedTarget.LED3, LedColor.BLUE, 300);
-            opath = Environment.getExternalStorageDirectory().getPath()+ "/DCIM/100RICOH/" + session_name + "_tonemap.jpg";
+            opath = Environment.getExternalStorageDirectory().getPath()+ "/DCIM/100RICOH/" + session_name + ".JPG";
             Log.i(TAG,"Saving tonemapped file as " + opath + ".");
             //org.opencv.core.Core.multiply(ldrMantiuk, new Scalar(255,255,255), ldrMantiuk);
             imwrite(opath, ldrDrago );
-
+            /*  need do some stuff with exif data to fix reading in app
+            try
+            {
+                ExifInterface newExif = new ExifInterface(opath);
+                //ExifInterface exif =  new ExifInterface(opath);
+                newExif = auto_pic_Exif;
+                newExif.saveAttributes();
+            }
+            catch (Exception e)
+            {
+                Log.i(TAG,"Exif error.");
+                e.printStackTrace();
+                Log.i(TAG,"end exif error.");
+            }
+            */
             Log.i(TAG,"File saving done.");
             hdrDebevec.release();
             ldrDrago.release();
@@ -600,39 +627,39 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
             //save image to storage
             Log.d(TAG,"onpicturetaken called ok");
             if (data != null) {
-                FileOutputStream fos;
+
                 try {
                     String tname = getNowDate();
                     String extra;
-
-                    // get picture info, iso and shutter
-                    Camera.Parameters params = mCamera.getParameters();
-                    String flattened = params.flatten();
-                    Log.d(TAG,flattened);
-                    StringTokenizer tokenizer = new StringTokenizer(flattened, ";");
-                    String text;
-                    String cur_shutter = "";
-                    String cur_iso  = "";
-                    while (tokenizer.hasMoreElements())
-                    {
-                        text = tokenizer.nextToken();
-                        if (text.contains("cur-exposure-time"))
-                        {
-                            cur_shutter = text.split("=")[1];
-                            Log.d(TAG,"INFO after: "+text);
-                        }
-                        /*else if (text.contains("RIC_"))
-                        {
-                            Log.d("INFO" ,"after: "+text);
-                        }*/
-                        else if (text.contains("cur-iso"))
-                        {
-                            cur_iso = text.split("=")[1];
-                            Log.d(TAG,"INFO after: "+text);
-                        }
-                    }
                     if ( m_is_auto_pic)
                     {
+                        // get picture info, iso and shutter
+                        Camera.Parameters params = mCamera.getParameters();
+                        String flattened = params.flatten();
+                        Log.d(TAG,flattened);
+                        StringTokenizer tokenizer = new StringTokenizer(flattened, ";");
+                        String text;
+                        String cur_shutter = "";
+                        String cur_iso  = "";
+                        while (tokenizer.hasMoreElements())
+                        {
+                            text = tokenizer.nextToken();
+                            if (text.contains("cur-exposure-time"))
+                            {
+                                cur_shutter = text.split("=")[1];
+                                Log.d(TAG,"INFO after: "+text);
+                            }
+                            /*else if (text.contains("RIC_"))
+                            {
+                                Log.d("INFO" ,"after: "+text);
+                            }*/
+                            else if (text.contains("cur-iso"))
+                            {
+                                cur_iso = text.split("=")[1];
+                                Log.d(TAG,"INFO after: "+text);
+                            }
+                        }
+
                         // Here we populate the bracket_array based on the base auto exposure picture.
                         extra = "auto_pic";
 
@@ -648,12 +675,14 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
 
                         // iso is always the lowest for now maybe alter we can implement a fast option with higher iso
                         // bracket_array =
-                        // {{iso,shutter,bracketpos, shutter_length_real },{iso,shutter,bracketpos,shutter_length_real },{iso,shutter,bracketpos,shutter_length_real },....}
+                        // {{iso,shutter,bracketpos, shutter_length_real, go_ahead },{iso,shutter,bracketpos,shutter_length_real, go_ahead },{iso,shutter,bracketpos,shutter_length_real, go_ahead },....}
                         // {{50, 1/50, 0},{50, 1/25, +1},{50,1/100,-1},{50,1/13,+2},....}
+                        // go_aherad is to turn of pictur takinfg when pict get full white or full black by default set 1, 0 means no pic
                         for( int i=0; i<numberOfPictures; i++)
                         {
                             boolean reached_18 = false;
                             bracket_array[i][0] = 1.0;
+                            bracket_array[i][4] = 1.0;
                             // 0=0  1 = *2,+1  2 = /2, -1, 3 = *4=2^2,+2, 4=/4=2^2,-2 5 = *8=2^3,+3, 6 = /8=2^3
                             if ( (i & 1) == 0 )
                             {
@@ -751,8 +780,13 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
                     String opath = Environment.getExternalStorageDirectory().getPath()+ "/DCIM/100RICOH/" +  session_name + "/" + extra + ".jpg";
                     //String opath = Environment.getExternalStorageDirectory().getPath()+ "/DCIM/100RICOH/IMG_" + Integer.toString(current_count) + ".JPG";
 
+                    FileOutputStream fos;
                     fos = new FileOutputStream(opath);
                     fos.write(data);
+
+
+
+
                     ExifInterface exif = new ExifInterface(opath);
 /*
                     if (!extra.contains("auto_pic")) // setup opencv array for hdr merge
@@ -787,10 +821,41 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
                             "sec.jpg";
                     //File filenew = ;
 
-                    if (!extra.contains("auto_pic")) // save filename for easy retreive later on
+                    if (!extra.contains("auto_pic")) // save filename for easy retrieve later on
                     {
                         filename_array.add(opath_new);
                     }
+                    else
+                    {
+                        auto_pic = opath_new;
+                    }
+                    // check for full white pic and replace that with deafult white jpg to save time
+                    Log.d(TAG,"_c" + Integer.toString(number_of_noise_pics)+"_");
+                    if (opath_new.contains("_c" + Integer.toString(number_of_noise_pics)+"_"))
+                    {
+                        Log.i(TAG, "checking for full white");
+                        temp_pic = new Mat();
+                        temp_pic = imread(opath);
+                        Scalar mean = org.opencv.core.Core.mean(temp_pic);
+                        temp_pic.release();
+                        double new_mean = (mean.val[0] + mean.val[1] + mean.val[2]) / 3.0;
+                        Log.i(TAG, "Average Mean: " + Double.toString(new_mean));
+                        if (new_mean == 255.0)
+                        {
+                                // We can skip these images and replace them with resource white jpg
+                                // because they are full white
+                                white_picture = opath_new;
+                                saved_white_data = data;
+
+                                for (int i=current_count; i < numberOfPictures;i=i+2)
+                                {
+                                    bracket_array[i][4] = 0.0;
+                                    Log.i(TAG, "no pic on: " + Double.toString(i));
+                                }
+                        }
+                    }
+
+
 
                     new File(opath).renameTo(new File(opath_new));
                     Log.i(TAG,"Saving file " + opath_new);
@@ -822,9 +887,9 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
     }
 
     private static String getSessionName(){
-        final DateFormat df = new SimpleDateFormat("yyMMdd_HHmm");
+        final DateFormat df = new SimpleDateFormat("MMddHHmm");
         final Date date = new Date(System.currentTimeMillis());
-        return "S" + df.format(date) ;
+        return "R" + df.format(date) ;
     }
 
     private static void registImage(String fileName, String filePath, Context mcontext, String mimetype) {
