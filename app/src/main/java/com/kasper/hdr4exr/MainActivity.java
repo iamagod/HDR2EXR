@@ -93,6 +93,7 @@ import java.text.DecimalFormat;
 
 import static java.lang.Thread.sleep;
 import java.util.ArrayList;
+import java.util.function.DoubleToIntFunction;
 
 
 public class MainActivity extends PluginActivity implements SurfaceHolder.Callback {
@@ -559,11 +560,81 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
             Log.i(TAG,"Average Mean: " + Double.toString(new_mean));
             org.opencv.core.Core.divide(hdrDebevec,new Scalar(new_mean,new_mean,new_mean,0),hdrDebevec);
 
+            /*
+            Log.i(TAG,"Doing White balance.");
+            // Do white balance thing, we take the auto_pic detect in that one all the white pixels.
+            // Save those positions
+            // then check those pixels in the HDR merge en compensate the avarge value to be white again.
+
+
+            temp_pic = imread(auto_pic);
+            int low_value = 70;
+            int high_value = 135;
+            Mat mask = new Mat();
+            Mat output = new Mat();
+            Mat output2 = new Mat();
+            Mat coord = new Mat();
+            //ArrayList<Double[]> totaal = new ArrayList<Double[]>();
+
+            Log.i(TAG,"Doing White balance1.");
+            Mat mask_pic = new Mat(rows, cols, CvType.CV_8UC3, new Scalar(0, 0, 0));
+
+
+            for (int i = low_value; i < high_value; i++)
+            {
+                mask = new Mat();
+                Log.i(TAG,"Doing1 "+Integer.toString(i));
+                Core.inRange(temp_pic,new Scalar(i,i,i),new Scalar(i+3,i+3,i+3),mask);
+                Log.i(TAG,"Doing2 "+Integer.toString(i));
+                Core.bitwise_or(mask_pic,mask,mask_pic);
+                mask.release();
+                Log.i(TAG,"Doing3 "+Integer.toString(i));
+            }
+
+            Log.i(TAG,"Doing White balance2.");
+            Core.bitwise_and(temp_pic, temp_pic, output, mask_pic);
+            temp_pic.release();
+            org.opencv.imgproc.Imgproc.cvtColor(output, output2, org.opencv.imgproc.Imgproc.COLOR_RGB2GRAY);
+            Core.findNonZero(output2,coord);
+            Log.i(TAG,"Doing White balance3.");
+            output2.release();
+            output.release();
+            mask.release();
+            mask_pic.release();
+
+            Scalar avg  = new Scalar(0.0,0.0,0.0,0.0);
+            for (Integer j = 0; j < coord.rows(); j++)
+            {
+                avg.val[0] = avg.val[0] + hdrDebevec.get((int)coord.get(j,0)[0], (int)coord.get(j,0)[1])[0];
+                avg.val[1] = avg.val[1] + hdrDebevec.get((int)coord.get(j,0)[0], (int)coord.get(j,0)[1])[1];
+                avg.val[2] = avg.val[2] + hdrDebevec.get((int)coord.get(j,0)[0], (int)coord.get(j,0)[1])[2];
+
+            }
+            avg.val[0] = avg.val[0]/coord.rows();
+            avg.val[1] = avg.val[1]/coord.rows();
+            avg.val[2] = avg.val[2]/coord.rows();
+            Log.d(TAG,"Avg: " + avg.toString());
+
+            coord.release();
+
+            double Y = (0.2126 * avg.val[0] + 0.7152 * avg.val[1] + 0.0722 * avg.val[2]);
+            Scalar multY = new Scalar(Y/avg.val[0], Y/avg.val[1], Y/avg.val[2], 0.0);
+            Mat hdrDebevecY = new Mat();
+            org.opencv.core.Core.multiply(hdrDebevec,multY,hdrDebevecY);
+            */
+
+
             opath = Environment.getExternalStorageDirectory().getPath()+ "/DCIM/100RICOH/" + session_name + ".EXR";
-            Log.i(TAG,"Saving Averaged file as " + opath + ".");
+            Log.i(TAG,"Saving EXR file as " + opath + ".");
             notificationLedBlink(LedTarget.LED3, LedColor.RED, 300);
             imwrite(opath, hdrDebevec,compressParams);
 
+            /*
+            opath = Environment.getExternalStorageDirectory().getPath()+ "/DCIM/100RICOH/" + session_name + "_Y.EXR";
+            Log.i(TAG,"Saving EXR Y file as " + opath + ".");
+            notificationLedBlink(LedTarget.LED3, LedColor.RED, 150);
+            imwrite(opath, hdrDebevecY,compressParams);
+            */
 
             Log.i(TAG,"Starting Tonemapping.");
 
@@ -599,6 +670,8 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
             */
             Log.i(TAG,"File saving done.");
             hdrDebevec.release();
+            //hdrDebevecY.release();
+
             ldrDrago.release();
             responseDebevec.release();
 
