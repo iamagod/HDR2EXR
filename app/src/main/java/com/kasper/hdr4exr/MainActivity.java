@@ -40,7 +40,10 @@ import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.ImageFormat;
+import android.graphics.drawable.Drawable;
 import android.hardware.Camera;
 import android.os.Bundle;
 import android.os.Environment;
@@ -67,6 +70,7 @@ import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.lang.String;
 
 import org.opencv.core.MatOfInt;
@@ -101,9 +105,9 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
     private Context mcontext;
     private int bcnt = 0; //bracketing count
 
-    private static final int numberOfPictures = 11;  // number of pictures for the bracket
+    private static final int numberOfPictures = 3;  // number of pictures for the bracket
     private static final Double stop_jumps = 2.5; // stops jump between each bracket
-    private static final int number_of_noise_pics = 3; // number of pictures take for noise reduction
+    private static final int number_of_noise_pics = 1; // number of pictures take for noise reduction
 
     Double[][] bracket_array = new Double[numberOfPictures][5];
     Mat times = new Mat(numberOfPictures,1,CvType.CV_32F);
@@ -447,7 +451,7 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
                     org.opencv.core.Core.divide(average_pic, new Scalar(((float) number_of_noise_pics + 0.0),
                             ((float) number_of_noise_pics + 0.0),
                             ((float) number_of_noise_pics + 0.0)), average_pic);
-                    Log.i(TAG, "Total average value " + Double.toString(average_pic.get(1, 1)[0]));
+                    Log.d(TAG, "Total average value " + Double.toString(average_pic.get(1, 1)[0]));
 
                     opath = filename_array.get(i * number_of_noise_pics + number_of_noise_pics - 1);
                     opath = opath.replace("c1", "avg");
@@ -548,93 +552,117 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
 
             // Start Saving HDR Files.
 
-            //opath = Environment.getExternalStorageDirectory().getPath()+ "/DCIM/100RICOH/" + session_name + ".exr";
-            //Log.i(TAG,"Saving unAveraged file as " + opath + ".");
-            //imwrite(opath, hdrDebevec,compressParams);
-
-            //We divide by the mean value of the whole picture to get the exposure values with a proper range.
+            // We divide by the mean value of the whole picture to get the exposure values with a proper range.
+            // Multiplied by 2 to get average value around 0.5 and 1.0, this has a better starting point.
 
             Scalar mean =  org.opencv.core.Core.mean(hdrDebevec);
             Log.d(TAG,"Mean: " + mean.toString());
-            double new_mean = (mean.val[0]+mean.val[1]+mean.val[2])/3.0;
+            double new_mean = (mean.val[0]*2 + mean.val[1]*2 +mean.val[2]*2 )/3.0;
             Log.i(TAG,"Average Mean: " + Double.toString(new_mean));
             org.opencv.core.Core.divide(hdrDebevec,new Scalar(new_mean,new_mean,new_mean,0),hdrDebevec);
 
-            /*
+
             Log.i(TAG,"Doing White balance.");
             // Do white balance thing, we take the auto_pic detect in that one all the white pixels.
             // Save those positions
-            // then check those pixels in the HDR merge en compensate the avarge value to be white again.
+            // then check those pixels in the HDR merge en compensate the average value to be white again.
 
 
             temp_pic = imread(auto_pic);
             int low_value = 70;
             int high_value = 135;
             Mat mask = new Mat();
-            Mat output = new Mat();
+            //Mat output = new Mat();
             Mat output2 = new Mat();
             Mat coord = new Mat();
             //ArrayList<Double[]> totaal = new ArrayList<Double[]>();
 
-            Log.i(TAG,"Doing White balance1.");
+            Mat mask_pic_w = new Mat(rows, cols, CvType.CV_8UC3, new Scalar(255, 255, 255));
             Mat mask_pic = new Mat(rows, cols, CvType.CV_8UC3, new Scalar(0, 0, 0));
 
 
+            Log.i(TAG,"Going through all white pixels.");
             for (int i = low_value; i < high_value; i++)
             {
-                mask = new Mat();
-                Log.i(TAG,"Doing1 "+Integer.toString(i));
                 Core.inRange(temp_pic,new Scalar(i,i,i),new Scalar(i+3,i+3,i+3),mask);
-                Log.i(TAG,"Doing2 "+Integer.toString(i));
-                Core.bitwise_or(mask_pic,mask,mask_pic);
-                mask.release();
-                Log.i(TAG,"Doing3 "+Integer.toString(i));
+                Core.bitwise_or(mask_pic_w,mask_pic,mask_pic,mask);
             }
 
-            Log.i(TAG,"Doing White balance2.");
-            Core.bitwise_and(temp_pic, temp_pic, output, mask_pic);
+
+            //Core.bitwise_and(temp_pic, mask_pic, output);
             temp_pic.release();
-            org.opencv.imgproc.Imgproc.cvtColor(output, output2, org.opencv.imgproc.Imgproc.COLOR_RGB2GRAY);
+            org.opencv.imgproc.Imgproc.cvtColor(mask_pic, output2, org.opencv.imgproc.Imgproc.COLOR_RGB2GRAY);
+
             Core.findNonZero(output2,coord);
-            Log.i(TAG,"Doing White balance3.");
+
             output2.release();
-            output.release();
+            //output.release();
             mask.release();
             mask_pic.release();
+            mask_pic_w.release();
 
-            Scalar avg  = new Scalar(0.0,0.0,0.0,0.0);
+
+            Mat avg = new Mat(1, 1, CvType.CV_32FC3, new Scalar(0.0, 0.0, 0.0));
+
+            Log.i(TAG,"Found "+Integer.toString(coord.rows())+" white pixels.");
             for (Integer j = 0; j < coord.rows(); j++)
             {
-                avg.val[0] = avg.val[0] + hdrDebevec.get((int)coord.get(j,0)[0], (int)coord.get(j,0)[1])[0];
-                avg.val[1] = avg.val[1] + hdrDebevec.get((int)coord.get(j,0)[0], (int)coord.get(j,0)[1])[1];
-                avg.val[2] = avg.val[2] + hdrDebevec.get((int)coord.get(j,0)[0], (int)coord.get(j,0)[1])[2];
-
+                org.opencv.core.Core.add(avg, new Scalar(   hdrDebevec.get((int)coord.get(j,0)[1], (int)coord.get(j,0)[0])[0],
+                                                            hdrDebevec.get((int)coord.get(j,0)[1], (int)coord.get(j,0)[0])[1],
+                                                            hdrDebevec.get((int)coord.get(j,0)[1], (int)coord.get(j,0)[0])[2],
+                                                            0.0),avg);
             }
-            avg.val[0] = avg.val[0]/coord.rows();
-            avg.val[1] = avg.val[1]/coord.rows();
-            avg.val[2] = avg.val[2]/coord.rows();
-            Log.d(TAG,"Avg: " + avg.toString());
+            //Log.i(TAG,"Doing White balance4.");
+            org.opencv.core.Core.divide((double)coord.rows(),avg,avg);
 
-            coord.release();
+            Log.d(TAG,"Average of white pixels is: " + String.valueOf(avg.get(0,0)[0])
+                                + " " +String.valueOf(avg.get(0,0)[1])
+                                +" "+String.valueOf(avg.get(0,0)[2]));
 
-            double Y = (0.2126 * avg.val[0] + 0.7152 * avg.val[1] + 0.0722 * avg.val[2]);
-            Scalar multY = new Scalar(Y/avg.val[0], Y/avg.val[1], Y/avg.val[2], 0.0);
+
+
+            double Y = (0.2126 * avg.get(0,0)[2] + 0.7152 * avg.get(0,0)[1] + 0.0722 * avg.get(0,0)[0]);
+            //double Y = avg.get(0,0)[1];
+            Scalar multY = new Scalar(Y/avg.get(0,0)[0], Y/avg.get(0,0)[1], Y/avg.get(0,0)[2], 0.0);
+
+            Log.d(TAG,"Brightness value is: " + String.valueOf(Y));
+            Log.d(TAG,"Multiplying by: " + multY.toString());
+
             Mat hdrDebevecY = new Mat();
-            org.opencv.core.Core.multiply(hdrDebevec,multY,hdrDebevecY);
-            */
+            org.opencv.core.Core.divide(hdrDebevec,multY,hdrDebevecY); // Why divide and not mult? works better don't understand.
 
+            double B1 = hdrDebevec.get((int)coord.get(0,0)[1], (int)coord.get(0,0)[0])[0];
+            double G1 = hdrDebevec.get((int)coord.get(0,0)[1], (int)coord.get(0,0)[0])[1];
+            double R1 = hdrDebevec.get((int)coord.get(0,0)[1], (int)coord.get(0,0)[0])[2];
+            Log.d(TAG,"Before: " + String.valueOf(B1) +" "+ String.valueOf(G1) +" "+ String.valueOf(R1));
 
-            opath = Environment.getExternalStorageDirectory().getPath()+ "/DCIM/100RICOH/" + session_name + ".EXR";
+            B1 = hdrDebevecY.get((int)coord.get(0,0)[1], (int)coord.get(0,0)[0])[0];
+            G1 = hdrDebevecY.get((int)coord.get(0,0)[1], (int)coord.get(0,0)[0])[1];
+            R1 = hdrDebevecY.get((int)coord.get(0,0)[1], (int)coord.get(0,0)[0])[2];
+            Log.d(TAG,"After Y: " + String.valueOf(B1) +" "+ String.valueOf(G1) +" "+ String.valueOf(R1));
+
+            B1 = hdrDebevec.get((int)coord.get(coord.rows()-1,0)[1], (int)coord.get(coord.rows()-1,0)[0])[0];
+            G1 = hdrDebevec.get((int)coord.get(coord.rows()-1,0)[1], (int)coord.get(coord.rows()-1,0)[0])[1];
+            R1 = hdrDebevec.get((int)coord.get(coord.rows()-1,0)[1], (int)coord.get(coord.rows()-1,0)[0])[2];
+            Log.d(TAG,"Before end: " + String.valueOf(B1) +" "+ String.valueOf(G1) +" "+ String.valueOf(R1));
+
+            B1 = hdrDebevecY.get((int)coord.get(coord.rows()-1,0)[1], (int)coord.get(coord.rows()-1,0)[0])[0];
+            G1 = hdrDebevecY.get((int)coord.get(coord.rows()-1,0)[1], (int)coord.get(coord.rows()-1,0)[0])[1];
+            R1 = hdrDebevecY.get((int)coord.get(coord.rows()-1,0)[1], (int)coord.get(coord.rows()-1,0)[0])[2];
+            Log.d(TAG,"After Y end: " + String.valueOf(B1) +" "+ String.valueOf(G1) +" "+ String.valueOf(R1));
+
+            /*
+            opath = Environment.getExternalStorageDirectory().getPath()+ "/DCIM/100RICOH/" + session_name + "_nY.EXR";
             Log.i(TAG,"Saving EXR file as " + opath + ".");
             notificationLedBlink(LedTarget.LED3, LedColor.RED, 300);
             imwrite(opath, hdrDebevec,compressParams);
+            */
 
-            /*
-            opath = Environment.getExternalStorageDirectory().getPath()+ "/DCIM/100RICOH/" + session_name + "_Y.EXR";
+            opath = Environment.getExternalStorageDirectory().getPath()+ "/DCIM/100RICOH/" + session_name + ".EXR";
             Log.i(TAG,"Saving EXR Y file as " + opath + ".");
             notificationLedBlink(LedTarget.LED3, LedColor.RED, 150);
             imwrite(opath, hdrDebevecY,compressParams);
-            */
+
 
             Log.i(TAG,"Starting Tonemapping.");
 
@@ -642,7 +670,7 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
             org.opencv.photo.TonemapDrago tonemapDrago = org.opencv.photo.Photo.createTonemapDrago((float)1.0,(float)0.7);
             Log.i(TAG,"done creating tonemap.");
 
-            tonemapDrago.process(hdrDebevec, ldrDrago);
+            tonemapDrago.process(hdrDebevecY, ldrDrago);
             //ldrMantiuk = 3 * ldrMantiuk;
             Log.i(TAG,"Multiplying tonemap.");
 
@@ -653,13 +681,36 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
             Log.i(TAG,"Saving tonemapped file as " + opath + ".");
             //org.opencv.core.Core.multiply(ldrMantiuk, new Scalar(255,255,255), ldrMantiuk);
             imwrite(opath, ldrDrago );
-            /*  need do some stuff with exif data to fix reading in app
+
+            //  need do some stuff with exif data to fix reading in app
+
+
+            //Drawable drawable = getResources().getDrawable(android.R.drawable.ref);
+            //Bitmap bitmap = BitmapFactory.decodeResource(getResources(),R.drawable.ref);
+            String opath_exif = Environment.getExternalStorageDirectory().getPath()+ "/DCIM/100RICOH/exif_file.JPG";
+
+            File file = new File(opath_exif);
+
+            try {
+                InputStream is_jpg = getResources().openRawResource(R.raw.ref);;
+                OutputStream os = new FileOutputStream(file);
+                byte[] data = new byte[is_jpg.available()];
+                is_jpg.read(data);
+                os.write(data);
+                is_jpg.close();
+                os.close();
+            } catch (IOException e) {
+                // Unable to create file, likely because external storage is
+                // not currently mounted.
+                Log.i("ExternalStorage", "Error writing " + file, e);
+            }
+            Log.i(TAG,"Exif copy ");
             try
             {
-                ExifInterface newExif = new ExifInterface(opath);
-                //ExifInterface exif =  new ExifInterface(opath);
-                newExif = auto_pic_Exif;
-                newExif.saveAttributes();
+                ExifInterface tone_mapped_Exif = new ExifInterface(opath);
+                ExifInterface ref_exif =  new ExifInterface(opath_exif);
+                tone_mapped_Exif = ref_exif;
+                tone_mapped_Exif.saveAttributes();
             }
             catch (Exception e)
             {
@@ -667,10 +718,12 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
                 e.printStackTrace();
                 Log.i(TAG,"end exif error.");
             }
-            */
+
             Log.i(TAG,"File saving done.");
             hdrDebevec.release();
-            //hdrDebevecY.release();
+            hdrDebevecY.release();
+
+            coord.release();
 
             ldrDrago.release();
             responseDebevec.release();
@@ -936,8 +989,8 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
                     Log.d(TAG,"EXIF iso value: " + exif.getAttribute(ExifInterface.TAG_ISO_SPEED_RATINGS));
                     Log.d(TAG,"EXIF shutter value " + exif.getAttribute(ExifInterface.TAG_SHUTTER_SPEED_VALUE) + " or " + out + " sec.");
                     Log.d(TAG,"EXIF shutter value/exposure value " + exif.getAttribute(ExifInterface.TAG_EXPOSURE_TIME) + " sec.");
-                    Log.d(TAG,"EXIF Color Temp: " + exif.getAttribute(ExifInterface.TAG_WHITE_BALANCE));
-                    Log.d(TAG,"EXIF white point: " + exif.getAttribute(ExifInterface.TAG_WHITE_POINT));
+                    //Log.d(TAG,"EXIF Color Temp: " + exif.getAttribute(ExifInterface.TAG_WHITE_BALANCE));
+                    //Log.d(TAG,"EXIF white point: " + exif.getAttribute(ExifInterface.TAG_WHITE_POINT));
 
 
                     fos.close();
