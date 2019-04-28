@@ -3,19 +3,14 @@
  * Modified to use Shutter speed instead of exposure compensation
  * Added openCV support
  *
- * TODO v1
- * - make colors and sounds better
- * - fix whitebalance problems
- * - support tonemapped jpg in theta default app
- * - look into download of exr
- *
  * TODO ideas
  * - split in two seperate pieces with unstiched version to get seperate crc -> weird crash -> maybe split stiched pic in two?
  * - export default python script to recreate hdri offline?
- * - add dng  to output -> supprt adobe dng sdk
+ * - add dng  to output -> support adobe dng sdk
  * - support opencv 4
  * - fix black hole sun
  * - support Z1
+ * - support tonemapped jpg in theta default app -> no idea why it doesn't work, maybe something with adding right exif data but maybe not.
  *
  * TODO v2
  * - add web interface
@@ -101,17 +96,19 @@ import java.util.function.DoubleToIntFunction;
 
 
 public class MainActivity extends PluginActivity implements SurfaceHolder.Callback {
+
+    //#################################################################################################
+    private static final int numberOfPictures = 11;    // number of pictures for the bracket          #
+    private static final Double stop_jumps = 2.5;      // stops jump between each bracket             #
+    private static final int number_of_noise_pics = 3; // number of pictures take for noise reduction #
+    //#################################################################################################
+
     private Camera mCamera = null;
     private Context mcontext;
     private int bcnt = 0; //bracketing count
 
-    private static final int numberOfPictures = 3;  // number of pictures for the bracket
-    private static final Double stop_jumps = 2.5; // stops jump between each bracket
-    private static final int number_of_noise_pics = 1; // number of pictures take for noise reduction
-
     Double[][] bracket_array = new Double[numberOfPictures][5];
     Mat times = new Mat(numberOfPictures,1,CvType.CV_32F);
-
 
     int current_count = 0;
     int noise_count = number_of_noise_pics;
@@ -170,29 +167,6 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
     }
 
 
-
-    public void LoadText(int resourceId) {
-        // The InputStream opens the resourceId and sends it to the buffer
-        InputStream is = this.getResources().openRawResource(resourceId);
-        BufferedReader br = new BufferedReader(new InputStreamReader(is));
-        String readLine = null;
-
-        try {
-            // While the BufferedReader readLine is not null
-            while ((readLine = br.readLine()) != null) {
-                Log.i(TAG, readLine);
-            }
-
-            // Close the InputStream and BufferedReader
-            is.close();
-            br.close();
-
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-
     /* Called when the activity is first created. */
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -219,7 +193,7 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
                     customShutter();
                 }
                 else if(keyCode == KeyReceiver.KEYCODE_WLAN_ON_OFF){ // Old code
-                    notificationLedBlink(LedTarget.LED3, LedColor.MAGENTA, 300);
+                    notificationLedBlink(LedTarget.LED3, LedColor.MAGENTA, 2000);
 
                 }
             }
@@ -245,7 +219,10 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
     public void onResume() {
         super.onResume();
         if(m_is_bracket){
-            notificationLedBlink(LedTarget.LED3, LedColor.MAGENTA, 300);
+            notificationLedBlink(LedTarget.LED3, LedColor.MAGENTA, 2000);
+            notificationLedHide(LedTarget.LED3);
+            notificationLedShow(LedTarget.LED3);
+            notificationLed3Show(LedColor.MAGENTA);
         }
         else {
             notificationLedBlink(LedTarget.LED3, LedColor.CYAN, 2000);
@@ -344,6 +321,7 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
         //params = mCamera.getParameters();
 
         session_name = getSessionName();
+
         Log.i(TAG,"Starting new session with name: " + session_name);
         Log.i(TAG,"About to take first auto picture to measure lighting settings.");
         new File(Environment.getExternalStorageDirectory().getPath()+ "/DCIM/100RICOH/"+session_name).mkdir();
@@ -546,7 +524,7 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
             Log.i(TAG,"Preping merge.");
             Mat hdrDebevec = new Mat();
             org.opencv.photo.MergeDebevec mergeDebevec = org.opencv.photo.Photo.createMergeDebevec();
-            notificationLedBlink(LedTarget.LED3, LedColor.BLUE, 300);
+
             Log.i(TAG,"Starting merge.");
             mergeDebevec.process(images, hdrDebevec, times, responseDebevec);
 
@@ -563,23 +541,21 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
 
 
             Log.i(TAG,"Doing White balance.");
+            notificationLedBlink(LedTarget.LED3, LedColor.BLUE, 300);
             // Do white balance thing, we take the auto_pic detect in that one all the white pixels.
             // Save those positions
             // then check those pixels in the HDR merge en compensate the average value to be white again.
 
 
-            temp_pic = imread(auto_pic);
-            int low_value = 70;
-            int high_value = 135;
-            Mat mask = new Mat();
-            //Mat output = new Mat();
-            Mat output2 = new Mat();
-            Mat coord = new Mat();
-            //ArrayList<Double[]> totaal = new ArrayList<Double[]>();
+            int low_value = 80;
+            int high_value = 128;
 
+            Mat mask = new Mat();
+            Mat coord = new Mat();
             Mat mask_pic_w = new Mat(rows, cols, CvType.CV_8UC3, new Scalar(255, 255, 255));
             Mat mask_pic = new Mat(rows, cols, CvType.CV_8UC3, new Scalar(0, 0, 0));
 
+            temp_pic = imread(auto_pic);
 
             Log.i(TAG,"Going through all white pixels.");
             for (int i = low_value; i < high_value; i++)
@@ -589,14 +565,12 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
             }
 
 
-            //Core.bitwise_and(temp_pic, mask_pic, output);
             temp_pic.release();
-            org.opencv.imgproc.Imgproc.cvtColor(mask_pic, output2, org.opencv.imgproc.Imgproc.COLOR_RGB2GRAY);
+            org.opencv.imgproc.Imgproc.cvtColor(mask_pic, temp_pic, org.opencv.imgproc.Imgproc.COLOR_RGB2GRAY);
 
-            Core.findNonZero(output2,coord);
+            Core.findNonZero(temp_pic,coord);
 
-            output2.release();
-            //output.release();
+            temp_pic.release();
             mask.release();
             mask_pic.release();
             mask_pic_w.release();
@@ -612,7 +586,6 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
                                                             hdrDebevec.get((int)coord.get(j,0)[1], (int)coord.get(j,0)[0])[2],
                                                             0.0),avg);
             }
-            //Log.i(TAG,"Doing White balance4.");
             org.opencv.core.Core.divide((double)coord.rows(),avg,avg);
 
             Log.d(TAG,"Average of white pixels is: " + String.valueOf(avg.get(0,0)[0])
@@ -622,7 +595,6 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
 
 
             double Y = (0.2126 * avg.get(0,0)[2] + 0.7152 * avg.get(0,0)[1] + 0.0722 * avg.get(0,0)[0]);
-            //double Y = avg.get(0,0)[1];
             Scalar multY = new Scalar(Y/avg.get(0,0)[0], Y/avg.get(0,0)[1], Y/avg.get(0,0)[2], 0.0);
 
             Log.d(TAG,"Brightness value is: " + String.valueOf(Y));
@@ -677,14 +649,19 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
             org.opencv.core.Core.multiply(ldrDrago, new Scalar(3*255,3*255,3*255), ldrDrago);
 
             notificationLedBlink(LedTarget.LED3, LedColor.BLUE, 300);
-            opath = Environment.getExternalStorageDirectory().getPath()+ "/DCIM/100RICOH/" + session_name + ".JPG";
+
+            StringBuilder sb = new StringBuilder(session_name);
+            sb.deleteCharAt(2);
+            String resultString = sb.toString();
+
+            opath = Environment.getExternalStorageDirectory().getPath()+ "/DCIM/100RICOH/" + resultString + ".JPG";
             Log.i(TAG,"Saving tonemapped file as " + opath + ".");
             //org.opencv.core.Core.multiply(ldrMantiuk, new Scalar(255,255,255), ldrMantiuk);
             imwrite(opath, ldrDrago );
 
             //  need do some stuff with exif data to fix reading in app
 
-
+            /*
             //Drawable drawable = getResources().getDrawable(android.R.drawable.ref);
             //Bitmap bitmap = BitmapFactory.decodeResource(getResources(),R.drawable.ref);
             String opath_exif = Environment.getExternalStorageDirectory().getPath()+ "/DCIM/100RICOH/exif_file.JPG";
@@ -718,6 +695,7 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
                 e.printStackTrace();
                 Log.i(TAG,"end exif error.");
             }
+            */
 
             Log.i(TAG,"File saving done.");
             hdrDebevec.release();
@@ -729,7 +707,10 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
             responseDebevec.release();
 
             Log.i(TAG,"----- JOB DONE -----");
-            notificationLedBlink(LedTarget.LED3, LedColor.MAGENTA, 300);
+            notificationLedBlink(LedTarget.LED3, LedColor.MAGENTA, 2000);
+            notificationLedHide(LedTarget.LED3);
+            notificationLedShow(LedTarget.LED3);
+            notificationLed3Show(LedColor.MAGENTA);
 
             Intent intent = new Intent("com.theta360.plugin.ACTION_AUDIO_SH_CLOSE");
             sendBroadcast(intent);
