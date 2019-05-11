@@ -3,8 +3,8 @@ apply plugin: 'com.android.application'
 android {
     compileSdkVersion 28
     defaultConfig {
-        applicationId "com.kasper.hdr4exr"
-        minSdkVersion 19
+        applicationId 'com.kasper.hdr2exr'
+        minSdkVersion 25
         targetSdkVersion 28
         versionCode 1
         versionName "1.0"
@@ -27,6 +27,8 @@ android {
             path file('Android.mk')
         }
     }
+    productFlavors {
+    }
 }
 
 dependencies {
@@ -38,5 +40,5 @@ dependencies {
     androidTestImplementation 'com.android.support.test.espresso:espresso-core:3.0.2'
     implementation project(':openCVLibrary344')
     implementation project(':pluginlibrary')
-    implementation "com.android.support:exifinterface:25.1.0"
+    implementation 'com.android.support:exifinterface:25.1.0'
 }
