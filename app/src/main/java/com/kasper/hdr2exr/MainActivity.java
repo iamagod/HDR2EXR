@@ -685,8 +685,17 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
             // We try the hack to copy the file with an jpg extension to make it accesable on windows
             Log.i(TAG,"Saving EXR as a jpg copy hack.");
             File source = new File(opath);
-            File target = new File(opath+"_removethis.JPG");
-            copyWithChannels(source, target, false);
+
+            // 5/16/2019 change by theta360.guide community
+//            File target = new File(opath+"_removethis.JPG");
+//            copyWithChannels(source, target, false);
+
+            File from = new File(opath);
+            File to = new File(opath+"_removethis.JPG");
+            if(from.exists())
+                from.renameTo(to);
+
+            // end change by theta360.guide community
 
 
 
