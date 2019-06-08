@@ -980,6 +980,11 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
                                 images_before_avg.add(imread(opath));
                             }
 */
+
+                    // firmware 3.00 doesn't support the tag shuuter_speed_value anymore
+                    // But thiw whole piece was just extra info so let's throw it out
+
+                    /*
                     String shutter_str = exif.getAttribute(ExifInterface.TAG_SHUTTER_SPEED_VALUE);
                     Float shutter_flt = (Float.parseFloat(shutter_str.split("/")[0]) / Float.parseFloat(shutter_str.split("/")[1]));
                     String out ="";
@@ -991,6 +996,8 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
                     {
                         out = Double.toString(1.0/(Math.pow(2,shutter_flt)));
                     }
+                    */
+
                     //String shttr_str = exif.getAttribute(ExifInterface.TAG_SHUTTER_SPEED_VALUE);
                     //Log.i(TAG,"shutter_float is" + shutter_flt);
                     Float shutter_speed_float = Float.parseFloat(exif.getAttribute(ExifInterface.TAG_EXPOSURE_TIME));
@@ -1046,7 +1053,7 @@ public class MainActivity extends PluginActivity implements SurfaceHolder.Callba
                     Log.i(TAG,"Saving file " + opath_new);
                     Log.i(TAG,"Shot with iso " + exif.getAttribute(ExifInterface.TAG_ISO_SPEED_RATINGS) +" and a shutter of "+  shutter_speed_string + " sec.\n");
                     Log.d(TAG,"EXIF iso value: " + exif.getAttribute(ExifInterface.TAG_ISO_SPEED_RATINGS));
-                    Log.d(TAG,"EXIF shutter value " + exif.getAttribute(ExifInterface.TAG_SHUTTER_SPEED_VALUE) + " or " + out + " sec.");
+                    //Log.d(TAG,"EXIF shutter value " + exif.getAttribute(ExifInterface.TAG_SHUTTER_SPEED_VALUE) + " or " + out + " sec.");
                     Log.d(TAG,"EXIF shutter value/exposure value " + exif.getAttribute(ExifInterface.TAG_EXPOSURE_TIME) + " sec.");
                     //Log.d(TAG,"EXIF Color Temp: " + exif.getAttribute(ExifInterface.TAG_WHITE_BALANCE));
                     //Log.d(TAG,"EXIF white point: " + exif.getAttribute(ExifInterface.TAG_WHITE_POINT));

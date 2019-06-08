@@ -1,6 +1,6 @@
 /*
  * This file is auto-generated.  DO NOT MODIFY.
- * Original file: C:\\Users\\craigdev\\Development\\ricoh\\hdr2exr-submit\\HDR2EXR\\openCVLibrary344\\src\\main\\aidl\\org\\opencv\\engine\\OpenCVEngineInterface.aidl
+ * Original file: /Users/kasper/Documents/scripts/HDR2EXR/openCVLibrary344/src/main/aidl/org/opencv/engine/OpenCVEngineInterface.aidl
  */
 package org.opencv.engine;
 /**
