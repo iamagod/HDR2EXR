@@ -6,12 +6,7 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-feature android:name="com.theta360.receptor.v" android:required="true"/>
-    <uses-feature android:name="com.theta360.receptor.z1" android:required="true"/>
-
-    <uses-feature android:name="com.theta360.receptor.webapi" android:version="2"/>
-    <uses-feature android:name="com.theta360.receptor.mtpapi" android:version="1"/>
-    <uses-feature android:name="com.theta360.receptor.bleapi" android:version="1"/>
-    <uses-feature android:name="com.theta360.receptor.pluginapi" android:version="1"/>
+    <uses-feature android:name="com.theta360.receptor.z1" android:required="false"/>
 
 
     <application
